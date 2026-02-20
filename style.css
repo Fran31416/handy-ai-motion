@@ -1,0 +1,198 @@
+/* Handy AI Motion - Settings Styles */
+
+/* Button Colors */
+.ham-btn-green {
+    background-color: #2b9e4b !important;
+    color: white !important;
+}
+
+.ham-btn-green:hover {
+    background-color: #238b3e !important;
+}
+
+.ham-btn-yellow {
+    background-color: #EFB700 !important;
+    color: white !important;
+}
+
+.ham-btn-yellow:hover {
+    background-color: #d4a400 !important;
+}
+
+.ham-btn-blue {
+    background-color: #3a6df0 !important;
+    color: white !important;
+}
+
+.ham-btn-blue:hover {
+    background-color: #2d5bd1 !important;
+}
+
+.ham-btn-red {
+    background-color: #c62828 !important;
+    color: white !important;
+}
+
+.ham-btn-red:hover {
+    background-color: #a51e1e !important;
+}
+
+/* Status Indicators */
+.ham-status-indicator {
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.ham-status-indicator.ready {
+    color: #4CAF50 !important;
+    background-color: rgba(76, 175, 80, 0.15);
+}
+
+.ham-status-indicator.error {
+    color: #FF5252 !important;
+    background-color: rgba(255, 82, 82, 0.15);
+}
+
+.ham-status-indicator.playing {
+    color: #2196F3 !important;
+    background-color: rgba(33, 150, 243, 0.15);
+    animation: ham-pulse 1.5s ease-in-out infinite;
+}
+
+.ham-status-indicator.idle {
+    color: #9E9E9E !important;
+    background-color: rgba(158, 158, 158, 0.15);
+}
+
+@keyframes ham-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Layout Helpers */
+.ham-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ham-label-flex {
+    flex: 1;
+}
+
+.ham-input-wide {
+    flex: 2;
+    min-width: 180px;
+}
+
+.ham-input-sm {
+    width: 80px;
+}
+
+.ham-input-xs {
+    width: 50px;
+}
+
+/* Button Row */
+.ham-button-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ham-wide-button {
+    flex: 1;
+    white-space: nowrap;
+}
+
+/* Status Row */
+.ham-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+}
+
+/* Group Row (for min/max pairs) */
+.ham-group-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ham-group-label {
+    min-width: 130px;
+}
+
+/* Textarea */
+.ham-textarea {
+    width: 100%;
+    min-height: 200px;
+    font-family: monospace;
+    font-size: 12px;
+    resize: vertical;
+    white-space: pre-wrap;
+}
+
+/* JSON Test Textarea */
+.ham-textarea-json {
+    width: 100%;
+    min-height: 120px;
+    font-family: monospace;
+    font-size: 12px;
+    resize: vertical;
+    white-space: pre;
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    color: inherit;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.ham-textarea-json::placeholder {
+    color: rgba(150, 150, 150, 0.7);
+}
+
+/* Hint Text */
+.ham-hint {
+    font-size: 12px;
+    color: #888;
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+.ham-hint code {
+    background-color: rgba(128, 128, 128, 0.2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* Code Block */
+.ham-code-block {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 12px;
+    overflow-x: auto;
+    margin: 10px 0;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+/* Container */
+.handy-ai-motion-settings {
+    padding-bottom: 10px;
+}
+
+/* Checkbox styling */
+.ham-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}

@@ -1,0 +1,227 @@
+<div class="handy-ai-motion-settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>Handy AI Motion</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+
+        <div class="inline-drawer-content">
+
+            <!-- Enable Toggle -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Enable Extension
+                </label>
+                <input id="ham_enabled" type="checkbox" class="text_pole" />
+            </div>
+
+            <!-- Auto Connect -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Auto-Connect on Startup
+                </label>
+                <input id="ham_auto_connect" type="checkbox" class="text_pole" />
+            </div>
+
+            <!-- Debug Mode -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Debug Mode (Console Logs)
+                </label>
+                <input id="ham_debug_mode" type="checkbox" class="text_pole" />
+            </div>
+
+            <hr class="sysHR" />
+
+            <!-- Connection Settings -->
+            <b>Connection Settings</b>
+
+            <!-- Intiface Address -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Intiface WebSocket Address
+                </label>
+                <input id="ham_intiface_address" class="text_pole ham-input-wide" type="text" placeholder="ws://localhost:12345" />
+            </div>
+
+            <!-- Connection Buttons -->
+            <div class="flex-container ham-button-row">
+                <button id="ham_connect_btn" class="menu_button ham-btn-green">
+                    Connect
+                </button>
+                <button id="ham_disconnect_btn" class="menu_button ham-btn-yellow">
+                    Disconnect
+                </button>
+                <button id="ham_stop_btn" class="menu_button ham-btn-red">
+                    STOP
+                </button>
+            </div>
+
+            <!-- Status Indicators -->
+            <div class="flex-container ham-status-row">
+                <label>Intiface Status</label>
+                <span id="ham_intiface_status" class="ham-status-indicator error">Not Connected</span>
+            </div>
+
+            <div class="flex-container ham-status-row">
+                <label>Device Status</label>
+                <span id="ham_device_status" class="ham-status-indicator error">No Device</span>
+            </div>
+
+            <div class="flex-container ham-status-row">
+                <label>Playback Status</label>
+                <span id="ham_playback_status" class="ham-status-indicator idle">Idle</span>
+            </div>
+
+            <hr class="sysHR" />
+
+            <!-- Slow Movement Expansion -->
+            <b>Slow Movement Handling</b>
+            <p class="ham-hint">
+                When movements are too slow for the device (below minimum speed), they can be expanded 
+                into step-and-hold segments. This preserves the intended timing while staying within 
+                device limits, creating a subtle "pulsing" or "teasing" motion.
+            </p>
+
+            <!-- Expand Slow Movements Toggle -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Expand Slow Movements
+                </label>
+                <input id="ham_expand_slow" type="checkbox" class="text_pole" />
+            </div>
+
+            <!-- Step Size -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Step Size (%)
+                </label>
+                <input id="ham_step_size" type="number" min="0.5" max="10" step="0.5" class="text_pole ham-input-sm" />
+            </div>
+            <p class="ham-hint">
+                <small>Position change per step when expanding. Smaller = smoother, larger = more pronounced pulsing.</small>
+            </p>
+
+            <hr class="sysHR" />
+
+            <!-- Custom JSON Test -->
+            <b>Device Settings</b>
+
+            <!-- Speed Range -->
+            <div class="flex-container ham-group-row">
+                <label class="ham-group-label">Speed Range (mm/s)</label>
+                <span>Min</span>
+                <input id="ham_min_speed" type="number" min="1" max="500" class="text_pole ham-input-sm" />
+                <span>Max</span>
+                <input id="ham_max_speed" type="number" min="50" max="1000" class="text_pole ham-input-sm" />
+            </div>
+            <p class="ham-hint">
+                <small>TheHandy default: 32-450 mm/s. Use 1-800 for overclocked mode.</small>
+            </p>
+
+            <!-- Stroke Length -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Stroke Length (mm)
+                </label>
+                <input id="ham_stroke_length" type="number" min="50" max="200" class="text_pole ham-input-sm" />
+            </div>
+            <p class="ham-hint">
+                <small>TheHandy 2: 125mm. TheHandy 1: 110mm.</small>
+            </p>
+
+            <hr class="sysHR" />
+
+            <!-- Custom JSON Test -->
+            <b>Custom JSON Test</b>
+            <p class="ham-hint">
+                Enter a custom JSON pattern to test. Use the format shown below.
+            </p>
+
+            <textarea id="ham_custom_test_json" class="text_pole ham-textarea-json" rows="8" placeholder='{
+  "start": ["500,70", "500,30"],
+  "loop": ["300,70", "300,30"]
+}'></textarea>
+
+            <div class="flex-container ham-button-row">
+                <button id="ham_custom_test_btn" class="menu_button ham-btn-blue ham-wide-button">
+                    Run Custom Test
+                </button>
+                <button id="ham_load_example_btn" class="menu_button ham-btn-yellow ham-wide-button">
+                    Load Example
+                </button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <!-- Retry Settings -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Auto-retry on Invalid Response
+                </label>
+                <input id="ham_retry_on_invalid" type="checkbox" class="text_pole" />
+            </div>
+            
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Max Retry Attempts
+                </label>
+                <input id="ham_max_retries" type="number" min="1" max="10" class="text_pole ham-input-sm" />
+            </div>
+            <p class="ham-hint">
+                <small>When enabled, automatically retries if LLM returns empty/invalid JSON.</small>
+            </p>
+
+            <hr class="sysHR" />
+
+            <!-- Analysis Prompt -->
+            <b>LLM Analysis Prompt</b>
+            <p class="ham-hint">
+                This prompt is sent to the LLM after each AI message to extract movement instructions.
+                Use <code>{{message}}</code> as a placeholder for the AI message.
+            </p>
+
+            <textarea id="ham_analysis_prompt" class="text_pole ham-textarea" rows="12" placeholder="Enter analysis prompt..."></textarea>
+
+            <div class="flex-container ham-button-row">
+                <button id="ham_reset_prompt_btn" class="menu_button ham-btn-yellow ham-wide-button">
+                    Reset to Default
+                </button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <!-- Test Message -->
+            <b>Test Message</b>
+            <p class="ham-hint">
+                Enter a test message to analyze without generating a new AI response. 
+                This message will be used when clicking "Test LLM Analysis" below.
+            </p>
+
+            <textarea id="ham_test_message" class="text_pole ham-textarea" rows="4" placeholder="Enter a test message to analyze..."></textarea>
+
+            <div class="flex-container ham-button-row">
+                <button id="ham_test_llm_btn" class="menu_button ham-btn-blue ham-wide-button">
+                    Test LLM Analysis
+                </button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <!-- JSON Format Info -->
+            <b>Expected JSON Format</b>
+            <pre class="ham-code-block">{
+  "start": ["delayMs,posPercent", ...],
+  "loop": ["delayMs,posPercent", ...]
+}</pre>
+            <p class="ham-hint">
+                <strong>start:</strong> Movements that play once at the beginning.<br>
+                <strong>loop:</strong> Movements that repeat forever until new instructions arrive.<br>
+                <strong>delayMs:</strong> Milliseconds before moving to this position.<br>
+                <strong>posPercent:</strong> Target position (0 = bottom, 100 = top).
+            </p>
+
+            <hr class="sysHR" />
+        </div>
+    </div>
+</div>
