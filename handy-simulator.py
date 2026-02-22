@@ -142,10 +142,16 @@ class VisualDisplay:
         
     def _clear_screen(self):
         """Clear screen and reset cursor."""
-        # Use a simple approach: clear and go to home position
-        sys.stdout.write("\033[2J\033[H")
+        if os.name == 'nt':          # Windows
+            os.system('cls')
+        else:                        # Linux, macOS, BSD, etc.
+            os.system('clear')
+        
+        # Optional: force flush just in case
         sys.stdout.flush()
-        self.initialized = True
+        
+        # Move self.initialized somewhere more logical if possible
+        # self.initialized = True
     
     def _move_to_top(self):
         """Move cursor to top of screen."""
@@ -185,25 +191,28 @@ class VisualDisplay:
                 status += f" @ {speed_mms:.0f} mm/s"
         else:
             status = "■ IDLE"
-        
-        return f"[{bar_str}] {pos_pct:5.1f}% → {tgt_pct:5.1f}% {status}"
+        status = f"{status:<22}"
+        return f"[{bar_str}]  {pos_pct:5.1f}% → {tgt_pct:5.1f}%  {status}"
     
     def draw_progress_bar(self, progress: float, remaining_ms: float) -> str:
-        """Draw a progress bar for the current movement."""
         progress_clamped = min(1.0, max(0.0, progress))
         filled = int(progress_clamped * 20)
-        bar = "█" * filled + "░" * (20 - filled)
-        return f"Progress: [{bar}] {progress_clamped*100:.0f}% | {remaining_ms:.0f}ms remaining"
+        
+        bar = f"[{'█' * filled}{'░' * (20 - filled)}]"
+        percent = f"{progress_clamped * 100:3.0f}%"
+        remain  = f"{remaining_ms:5.0f} ms remaining"
+        
+        return f"Progress: {bar}  {percent} | {remain}"
     
     def update_display(self, position: float, target: float, moving: bool,
                        movement: Optional[Movement], speed_mms: float = 0,
                        command_info: str = ""):
         """Update the full display."""
         lines = []
-        lines.append("┌" + "─" * (self.bar_width + 30) + "┐")
-        lines.append(f"│ {'TheHandy Simulator':^58} │")
-        lines.append("├" + "─" * (self.bar_width + 30) + "┤")
-        lines.append(f"│ {self.draw_position_bar(position, target, moving, speed_mms):^58} │")
+        lines.append("┌" + "─" * (self.bar_width + 50) + "┐")
+        lines.append(f"│ {'TheHandy Simulator':^88} │")
+        lines.append("├" + "─" * (self.bar_width + 50) + "┤")
+        lines.append(f"│ {self.draw_position_bar(position, target, moving, speed_mms):^88} │")
         
         if movement and movement.is_active:
             now_ms = get_time_ms()
@@ -211,12 +220,14 @@ class VisualDisplay:
             remaining_ms = max(0, movement.duration_ms - elapsed_ms)
             progress = elapsed_ms / movement.duration_ms if movement.duration_ms > 0 else 1.0
             
-            lines.append(f"│ {self.draw_progress_bar(progress, remaining_ms):^58} │")
+            lines.append(f"│ {self.draw_progress_bar(progress, remaining_ms):^88} │")
+        else:
+            lines.append(f"│ {' ':^88} │")
+            
+        lines.append("└" + "─" * (self.bar_width + 50) + "┘")
         
-        lines.append("└" + "─" * (self.bar_width + 30) + "┘")
-        
-        if command_info:
-            lines.append(f"  Last: {command_info}")
+        # if command_info:
+        #     lines.append(f"  Last: {command_info}")
         
         output = "\n".join(lines)
         
@@ -275,7 +286,7 @@ class HandySimulator:
             for v in parsed["vectors"]:
                 pos = v["position"]
                 dur = v["duration_ms"]
-                self.log(f"📦 LinearCmd: Position={pos*100:.1f}%, Duration={dur}ms")
+                # self.log(f"📦 LinearCmd: Position={pos*100:.1f}%, Duration={dur}ms")
                 self.last_command_info = f"Position={pos*100:.1f}%, Duration={dur}ms"
                 self.start_movement(position=pos, duration_ms=dur)
         else:
@@ -305,7 +316,7 @@ class HandySimulator:
         
         self.target_position = position
         
-        self.log(f"Movement: {self.current_movement.start_position*100:.1f}% → {position*100:.1f}% in {duration_ms}ms")
+        # self.log(f"Movement: {self.current_movement.start_position*100:.1f}% → {position*100:.1f}% in {duration_ms}ms")
     
     def update_position(self):
         """Update current position based on active movement."""
