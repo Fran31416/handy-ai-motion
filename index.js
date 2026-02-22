@@ -17,72 +17,98 @@ const defaultSettings = {
     testMessage: "She slowly moved closer, her breath warm against his skin. Her fingers traced gentle patterns down his chest as she pressed her body against his, a soft moan escaping her lips.",
     retryOnInvalid: true,
     maxRetries: 3,
-    analysisPrompt: `You are a motion analysis AI. Your task is to analyze the following AI-generated message and extract movement instructions for a linear actuator device (TheHandy).
+    analysisPrompt: `AI MESSAGE:
+"""
+{{message}}
+"""
 
-Analyze the message for emotional intensity, physical actions, pacing, and any implied movements. Generate a JSON response with movement patterns.
 
-First, briefly explain your analysis of the scene (1-2 sentences), then provide the JSON in a code block.
+You are a motion analysis AI. Your task is to analyze the following AI-generated message and extract movement instructions for a linear actuator device (TheHandy), focusing solely on the male character's penile sensations.
 
-The JSON format must be EXACTLY:
+Step 1 — Scene Classification
+
+Classify the scene into ONE stimulation state:
+
+- NONE: No sexual stimulation occurring.
+- IMPLIED: Sexual tension or anticipation, but no active stimulation.
+- ACTIVE: Explicit physical sexual stimulation occurring.
+- INTENSE: Explicit stimulation with high intensity or climax-level energy.
+
+Then determine:
+
+- Intensity progression (static / building / peaking / fluctuating)
+- Rhythm style (teasing hold / slow stroke / steady stroke / grinding / pulsing / mixed)
+- Stroke range width (small 10–20% / medium 30–50% / large 70–100%)
+- Dominant depth zone (shallow 10–30% / mid 40–60% / deep 70–90% / full range)
+- Complexity level (low / moderate / high)
+
+Complexity guidance:
+- low: 2–4 movements in loop
+- moderate: 4–8 movements in loop
+- high: 8–20 movements allowed if justified by scene
+
+Step 2 — Motion Generation Rules
+
+CRITICAL BEHAVIOR RULES:
+
+If state = NONE:
+- Output empty arrays OR a single hold position.
+- No rhythmic loop.
+
+If state = IMPLIED:
+- Use slow holds or subtle pulsing only.
+- Avoid full-range strokes.
+- Loop must be minimal and gentle.
+
+If state = ACTIVE:
+- Generate rhythmic motion reflecting described stimulation.
+
+If state = INTENSE:
+- Increase tempo and/or depth variation appropriately.
+
+Technical Rules:
+- delayMs = duration of movement toward the target position.
+- If position does not change, this represents a hold.
+- Movements must be physically plausible.
+- Maintain internal rhythm coherence.
+- Avoid unnecessary mechanical repetition unless the scene implies it.
+- If nothing happens, it is acceptable and needed to output:
+  { "start": [], "loop": [] }
+
+Output format:
+
+Brief explanation (1–2 sentences)
+
+Motion Profile:
+- Stimulation state: ...
+- Intensity progression: ...
+- Rhythm style: ...
+- Stroke range width: ...
+- Dominant depth zone: ...
+- Complexity level: ...
+
+Then JSON in a code block EXACTLY as:
+
 {
   "start": [
-    "delayMs,posPercent", 
-    "delayMs,posPercent", ...
+    "delayMs,posPercent"
   ],
   "loop": [
-    "delayMs,posPercent", 
-    "delayMs,posPercent", ...
+    "delayMs,posPercent"
   ]
 }
 
-You can add \\ comments, explanations, or extra text to the right of each action, as it will be parsed out automatically.
+You can add comments to the lines if needed
 
-Where:
-- start: movements that play ONCE at the beginning — use for buildup, teasing, setting the scene
-- loop: movements that REPEAT until new instructions arrive — use for sustained rhythm
-- delayMs: how long the movement takes (longer = slower, shorter = faster)
-- posPercent: target position (0 = bottom, 100 = top)
+Numeric Constraints:
+- delayMs must be a positive integer (> 0).
+- posPercent must be an integer from 0 to 100 inclusive.
+- Never output negative numbers.
+- Never output decimals.
 
-Movement Intensity Guide:
-- "Teasing hold": 2000-5000ms at partial positions (30-70%) — slow, anticipatory
-- "Slow sensual stroke": 500-1000ms for full range — gentle, intimate
-- "Building rhythm": 300-500ms for medium range — escalating pleasure
-- "Intense grinding": 200-400ms for smaller range (20-50%) — sustained pressure
-- "Climactic burst": 150-300ms for partial movements — peak intensity
-- "Recovery/pause": 1000-3000ms holding position — moment of stillness
 
-Position Meaning Guide (0-100% scale):
-- 0%: Full retraction / deepest withdrawal / rest position
-- 10-20%: Shallow tip teasing / minimal penetration
-- 30-40%: Light engagement / gentle introduction
-- 50%: Middle ground / comfortable depth
-- 60-70%: Deep engagement / full sensation
-- 80-90%: Near-maximum depth / intense pressure
-- 100%: Full extension / complete stroke
-
-Position Range Implications:
-- Small ranges (10-20% width): Focused stimulation, teasing, grinding
-- Medium ranges (30-50% width): Varied sensation, building tension
-- Large ranges (70-100% width): Full strokes, intense movement
-
-Contextual Positioning:
-- Start sequences: Often begin partial (30-50%) to build anticipation
-- Climax patterns: Often full range (0-100%) or deep (70-100%)
-- Teasing: Short strokes in sensitive zones (40-60% or 20-40%)
-- Recovery: Hold at neutral positions (40-60%)
-
-Guidelines:
-- Match the physical rhythm and intensity described in the scene
-- Longer start sequences work well for anticipation and teasing
-- Simpler loops create sustainable rhythms
-- Vary positions naturally — avoid mechanical 0-100-0 patterns
-- Consider the pacing: slow buildups, sustained middles, intense peaks
-- Use holds and pauses where the scene suggests stillness or tension
-
-AI Message to analyze:
-{{message}}
-
-You may also include a brief explanation before the JSON code block.`,
+ANALYSIS START (optional 1-2 sentences and detailed mandatory JSON with start and loop):
+`,
     debugMode: false,
 };
 
