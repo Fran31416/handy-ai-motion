@@ -1,11 +1,11 @@
 # Handy AI Motion
 
-A SillyTavern extension that connects to Intiface Central to control TheHandy linear actuator device using AI-analyzed message content.
+A SillyTavern extension that connects to Intiface Central to control The Handy linear actuator device using AI-analyzed message content.
 
 ## Features
 
 - **Automatic Motion Generation**: Analyzes AI-generated messages and extracts movement patterns
-- **Intiface Central Integration**: Connects via WebSocket to control TheHandy or any compatible linear actuator
+- **Intiface Central Integration**: Connects via WebSocket to control The Handy or any compatible linear actuator
 - **Smart Speed Handling**: Automatically clamps movements to device speed limits (32-450 mm/s)
 - **Slow Movement Expansion**: Expands slow movements into step-and-hold segments to preserve timing
 - **Configurable LLM Prompts**: Customize the analysis prompt for your specific use case
@@ -15,7 +15,7 @@ A SillyTavern extension that connects to Intiface Central to control TheHandy li
 
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern) (latest version)
 - [Intiface Central](https://intiface.com/#intiface-central) (for device communication)
-- TheHandy or any Buttplug-compatible linear actuator device
+- The Handy or any Buttplug-compatible linear actuator device
 - An LLM backend configured in SillyTavern
 
 ## Installation
@@ -46,7 +46,7 @@ git clone https://github.com/Fran31416/handy-ai-motion.git
 1. Download and install [Intiface Central](https://intiface.com/central/)
 2. Open Intiface Central
 3. Click "Start Server" (default port: 12345)
-4. Connect your TheHandy device (via Bluetooth or USB)
+4. Connect your The Handy device (via Bluetooth or USB)
 
 ### Extension Configuration
 
@@ -71,7 +71,7 @@ git clone https://github.com/Fran31416/handy-ai-motion.git
 |---------|---------|-------------|
 | Min Speed | 32 mm/s | Minimum movement speed (as low as 1 for overclocked devices) |
 | Max Speed | 450 mm/s | Maximum movement speed (up to 800 for overclocked devices) |
-| Stroke Length | 125 mm | Device stroke length (TheHandy 2: 125mm, TheHandy 1: 110mm) |
+| Stroke Length | 125 mm | Device stroke length (The Handy 2: 125mm, The Handy 1: 110mm) |
 
 ### Slow Movement Handling
 
@@ -207,7 +207,22 @@ If the requested speed exceeds limits, the duration is adjusted accordingly.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Found a bug? Have an idea? Want to improve the motion? Your contributions keep things moving smoothly. Feel free to lend a hand with a Pull Request!
+
+(As I currently don't have a physical device, testers are welcome, as well as sharing the experience with different models and prompts)
+
+## Testing with the Simulator
+
+You don't need a physical device to test changes. Use handy-simulator.py as a virtual The Handy device:
+
+1. Open Intiface Central
+2. Go to Settings → Advanced and enable Device Websocket Server
+3. Go to Devices and add a new Websocket Device:
+ - Protocol Type: thehandy
+ - Name: SimulatedHandy (Or change DEVICE_NAME in handy-simulator.py to match your preferred name)
+4. Start the Intiface Central server
+5. Run the simulator
+6. Connect the extension to Intiface Central - the simulator will appear as a device 
 
 ## License
 
