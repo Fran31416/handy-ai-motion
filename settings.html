@@ -132,6 +132,36 @@
 
             <hr class="sysHR" />
 
+            <!-- Patterns File Settings -->
+            <b>Predefined Patterns</b>
+            <p class="ham-hint">
+                Use predefined movement patterns from <code>patterns.json</code> instead of generating 
+                patterns from scratch. The LLM will select a pattern and apply speed/range modifiers.
+            </p>
+
+            <!-- Use Patterns File Toggle -->
+            <div class="flex-container ham-row">
+                <label class="ham-label-flex">
+                    Use Patterns File
+                </label>
+                <input id="ham_use_patterns" type="checkbox" class="text_pole" />
+            </div>
+
+            <!-- Patterns File Buttons -->
+            <div class="flex-container ham-button-row">
+                <button id="ham_open_patterns_btn" class="menu_button ham-btn-blue ham-wide-button">
+                    Open Patterns File
+                </button>
+                <button id="ham_reload_patterns_btn" class="menu_button ham-btn-yellow ham-wide-button">
+                    Reload Patterns
+                </button>
+            </div>
+            <p class="ham-hint">
+                <small>Add your own patterns to <code>patterns.json</code> in the extension folder.</small>
+            </p>
+
+            <hr class="sysHR" />
+
             <!-- Custom JSON Test -->
             <b>Custom JSON Test</b>
             <p class="ham-hint">
@@ -191,6 +221,24 @@
 
             <hr class="sysHR" />
 
+            <!-- Patterns Prompt -->
+            <b>Patterns Selection Prompt</b>
+            <p class="ham-hint">
+                This prompt is used when "Use Patterns File" is enabled. The LLM selects a pattern 
+                and applies modifiers. Use <code>{{message}}</code> for the AI message and 
+                <code>{{pattern_data}}</code> for the pattern list.
+            </p>
+
+            <textarea id="ham_patterns_prompt" class="text_pole ham-textarea" rows="12" placeholder="Enter patterns prompt..."></textarea>
+
+            <div class="flex-container ham-button-row">
+                <button id="ham_reset_patterns_prompt_btn" class="menu_button ham-btn-yellow ham-wide-button">
+                    Reset to Default
+                </button>
+            </div>
+
+            <hr class="sysHR" />
+
             <!-- Test Message -->
             <b>Test Message</b>
             <p class="ham-hint">
@@ -219,6 +267,28 @@
                 <strong>loop:</strong> Movements that repeat forever until new instructions arrive.<br>
                 <strong>delayMs:</strong> Milliseconds before moving to this position.<br>
                 <strong>posPercent:</strong> Target position (0 = bottom, 100 = top).
+            </p>
+
+            <hr class="sysHR" />
+
+            <!-- Pattern File Format Info -->
+            <b>Patterns File Format</b>
+            <pre class="ham-code-block">{
+  "patterns": [
+    {
+      "name": "pattern_name",
+      "description": "Description for LLM",
+      "pattern": {
+        "start": ["delayMs,pos"],
+        "loop": ["delayMs,pos"]
+      }
+    }
+  ]
+}</pre>
+            <p class="ham-hint">
+                <strong>name:</strong> Unique identifier for the pattern.<br>
+                <strong>description:</strong> Description shown to the LLM for selection.<br>
+                <strong>pattern:</strong> The movement pattern with start and loop arrays.
             </p>
 
             <hr class="sysHR" />

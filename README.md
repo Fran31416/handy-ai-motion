@@ -89,6 +89,105 @@ When a movement is too slow for the device (below minimum speed), it gets expand
 | Auto-retry on Invalid Response | Enabled | Retry LLM analysis if invalid JSON is returned |
 | Max Retry Attempts | 3 | Number of retry attempts before giving up |
 
+### Predefined Patterns Settings 
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Use Patterns File | Disabled | Use predefined patterns instead of generating from scratch |
+
+## Predefined Patterns 
+
+The predefined patterns feature allows you to use curated movement patterns stored in `patterns.json`. When enabled, the LLM will: 
+
+1. Receive a list of available patterns with descriptions
+2. Select the most appropriate pattern based on the scene
+3. Apply speed and range modifiers to customize the pattern
+
+### Pattern File Format 
+
+The `patterns.json` file uses this structure: 
+
+```json
+{
+  "patterns": [
+    {
+      "name": "pattern_name_1",
+      "description": "Description for LLM selection",
+      "pattern": {
+        "start": ["delayMs,posPercent", ...],
+        "loop": ["delayMs,posPercent", ...]
+      }
+    },
+    {
+      "name": "pattern_name_2",
+      "description": "Description for LLM selection",
+      "pattern": {
+        "start": ["delayMs,posPercent", ...],
+        "loop": ["delayMs,posPercent", ...]
+      }
+    }, ...
+  ]
+}
+```
+
+### Default Patterns 
+
+The extension includes 10 example patterns: 
+
+| Pattern | Description |
+|---------|---------|
+| `sine` | Smooth sinusoidal wave motion for gentle teasing |
+| `fast_stroke` | Quick full-range strokes for intense stimulation |
+| `slow_tease` | Slow deliberate strokes with pauses for anticipation |
+| `pulse` | Rhythmic pulsing motion in mid-range |
+| `edge_hold` | Long slow strokes to the edge with extended holds |
+| `grind` | Short grinding movements at the top |
+| `depth_thrust` | Full depth thrusting motion |
+| `random_tease` | Varied positions with irregular timing |
+| `wave_build` | Gradual intensity building wave |
+| `shallow_fast` | Fast shallow strokes in lower third |
+   
+### Adding Custom Patterns 
+
+You can add your own patterns to `patterns.json`: 
+```json
+{
+  "patterns": [
+    {
+      "name": "my_custom_pattern",
+      "description": "A custom pattern that does something special",
+      "pattern": {
+        "start": ["1000,50"],
+        "loop": ["500,100", "500,0"]
+      }
+    }
+  ]
+}
+```
+
+**Tips for creating patterns:**
+
+- Use descriptive names that hint at the motion style
+- Write clear descriptions for the LLM to understand when to select the pattern
+- Test patterns using the Custom JSON Test feature
+- Share your patterns with the community!
+
+### Pattern Modifiers 
+
+When the LLM selects a pattern, it can apply these modifiers: 
+
+| Modifier | Range | Description |
+|---------|---------|---------|
+| `speed_percent` | 0-100	Speed multiplier | (100 = original speed, 50 = half speed) |
+| `range_min` | 0-100 | Minimum position boundary |
+| `range_max` | 0-100 | Maximum position boundary |
+   
+
+The range modifiers allow shifting or compressing the pattern's range. For example: 
+
+- `range_min: 20, range_max: 80` limits movement to the middle 60%
+- `range_min: 70, range_max: 100` focuses on the top region only
+
 ## JSON Pattern Format
 
 The extension expects movement patterns in this format:
@@ -213,13 +312,13 @@ Found a bug? Have an idea? Want to improve the motion? Your contributions keep t
 
 ## Testing with the Simulator
 
-You don't need a physical device to test changes. Use handy-simulator.py as a virtual The Handy device:
+You don't need a physical device to test changes. Use `handy-simulator.py` as a virtual The Handy device:
 
 1. Open Intiface Central
 2. Go to Settings → Advanced and enable Device Websocket Server
 3. Go to Devices and add a new Websocket Device:
  - Protocol Type: thehandy
- - Name: SimulatedHandy (Or change DEVICE_NAME in handy-simulator.py to match your preferred name)
+ - Name: SimulatedHandy (Or change DEVICE_NAME in `handy-simulator.py` to match your preferred name)
 4. Start the Intiface Central server
 5. Run the simulator
 6. Connect the extension to Intiface Central - the simulator will appear as a device 

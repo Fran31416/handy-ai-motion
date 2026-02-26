@@ -17,6 +17,7 @@ const defaultSettings = {
     testMessage: "She slowly moved closer, her breath warm against his skin. Her fingers traced gentle patterns down his chest as she pressed her body against his, a soft moan escaping her lips.",
     retryOnInvalid: true,
     maxRetries: 3,
+    usePatternsFile: false, // Use predefined patterns from patterns.json
     analysisPrompt: `AI MESSAGE:
 """
 {{message}}
@@ -109,6 +110,69 @@ Numeric Constraints:
 
 ANALYSIS START (optional 1-2 sentences and detailed mandatory JSON with start and loop):
 `,
+    patternsPrompt: `AI MESSAGE:
+"""
+{{message}}
+"""
+
+AVAILABLE PATTERNS:
+{{pattern_data}}
+
+You are a motion pattern selector AI. Your task is to analyze the AI-generated message and select the most appropriate pattern from the available patterns above, then customize it with speed and range modifiers.
+
+Step 1 — Scene Classification
+
+Classify the scene into ONE stimulation state:
+- NONE: No sexual stimulation occurring.
+- IMPLIED: Sexual tension or anticipation, but no active stimulation.
+- ACTIVE: Explicit physical sexual stimulation occurring.
+- INTENSE: Explicit stimulation with high intensity or climax-level energy.
+
+Step 2 — Pattern Selection Rules
+
+If state = NONE:
+- Select any gentle pattern with speed_percent: 20 or lower.
+- Range modifiers should keep movements minimal.
+
+If state = IMPLIED:
+- Select patterns like "sine", "pulse", or "slow_tease".
+- Use speed_percent between 20-50.
+
+If state = ACTIVE:
+- Select patterns that match the described rhythm.
+- Use speed_percent between 50-80.
+
+If state = INTENSE:
+- Select patterns like "fast_stroke", "depth_thrust", or "wave_build".
+- Use speed_percent between 80-100.
+
+Range Modifiers:
+- range_min: New minimum position (0-100, default from pattern)
+- range_max: New maximum position (0-100, default from pattern)
+- Use these to shift or compress the pattern's range.
+
+Output format:
+
+Brief explanation (1–2 sentences)
+
+Then JSON in a code block EXACTLY as:
+
+{
+  "pattern": "pattern_name",
+  "speed_percent": 50,
+  "range_min": 0,
+  "range_max": 100
+}
+
+Where:
+- pattern: The exact name of the selected pattern from the available patterns
+- speed_percent: Speed modifier from 0-100 (0 = very slow, 100 = maximum speed)
+- range_min: Minimum position boundary (optional, uses pattern default if omitted)
+- range_max: Maximum position boundary (optional, uses pattern default if omitted)
+
+
+ANALYSIS START:
+`,
     debugMode: false,
 };
 
@@ -141,6 +205,9 @@ const PlaybackState = {
     currentPosition: 0,  // Track position across movements (0-100%)
 };
 
+// Cache for loaded patterns
+let cachedPatterns = null;
+
 /* ================================================================================================
    CONFIG ACCESSOR
 ================================================================================================ */
@@ -152,6 +219,183 @@ const PlaybackState = {
 function getConfig() {
     const s = extension_settings?.[extensionName];
     return s ? { ...defaultSettings, ...s } : { ...defaultSettings };
+}
+
+/* ================================================================================================
+   PATTERNS FILE HANDLING
+================================================================================================ */
+/**
+ * Loads patterns from the patterns.json file.
+ * @returns {Promise<Array>} Array of pattern objects.
+ */
+async function loadPatterns() {
+    if (cachedPatterns) {
+        return cachedPatterns;
+    }
+    
+    try {
+        const response = await fetch(`${extensionFolderPath}/patterns.json`);
+        if (!response.ok) {
+            console.warn(`${LOG_PREFIX} Could not load patterns.json: ${response.status}`);
+            return [];
+        }
+        
+        const data = await response.json();
+        cachedPatterns = data.patterns || [];
+        
+        if (cachedPatterns.length > 0) {
+            console.log(`${LOG_PREFIX} Loaded ${cachedPatterns.length} patterns from patterns.json`);
+        }
+        
+        return cachedPatterns;
+    } catch (err) {
+        console.warn(`${LOG_PREFIX} Error loading patterns.json:`, err);
+        return [];
+    }
+}
+
+/**
+ * Generates pattern data string for LLM prompt.
+ * @param {Array} patterns - Array of pattern objects.
+ * @returns {string} Formatted pattern data for LLM.
+ */
+function generatePatternDataForLLM(patterns) {
+    if (!patterns || patterns.length === 0) {
+        return "No patterns available.";
+    }
+    
+    const patternLines = patterns.map(p => {
+        return `- "${p.name}": ${p.description}`;
+    });
+    
+    return patternLines.join('\n');
+}
+
+/**
+ * Finds a pattern by name.
+ * @param {string} name - The pattern name to find.
+ * @param {Array} patterns - Array of pattern objects.
+ * @returns {Object|null} The found pattern or null.
+ */
+function findPatternByName(name, patterns) {
+    return patterns.find(p => p.name === name) || null;
+}
+
+/**
+ * Applies speed and range modifiers to a pattern.
+ * @param {Object} pattern - The pattern object with start and loop arrays.
+ * @param {number} speedPercent - Speed modifier (0-100, where 100 = original speed).
+ * @param {number} rangeMin - Minimum position boundary (optional).
+ * @param {number} rangeMax - Maximum position boundary (optional).
+ * @returns {Object} Modified pattern with adjusted timing and positions.
+ */
+function applyPatternModifiers(pattern, speedPercent, rangeMin = null, rangeMax = null) {
+    const speedMultiplier = Math.max(0.1, speedPercent / 100);
+    
+    // Determine original range from pattern
+    const allPositions = [...(pattern.pattern.start || []), ...(pattern.pattern.loop || [])]
+        .map(s => {
+            const parts = s.split(',');
+            return parseInt(parts[1]) || 0;
+        });
+    
+    const originalMin = Math.min(...allPositions);
+    const originalMax = Math.max(...allPositions);
+    const originalRange = originalMax - originalMin;
+    
+    // Use provided range or keep original
+    const newMin = rangeMin !== null ? rangeMin : originalMin;
+    const newMax = rangeMax !== null ? rangeMax : originalMax;
+    const newRange = newMax - newMin;
+    
+    /**
+     * Modifies a movement string with speed and range adjustments.
+     * @param {string} movementStr - The movement string "delayMs,posPercent".
+     * @returns {string} Modified movement string.
+     */
+    const modifyMovement = (movementStr) => {
+        const parts = movementStr.split(',');
+        if (parts.length !== 2) return movementStr;
+        
+        const delay = parseInt(parts[0]);
+        let pos = parseFloat(parts[1]);
+        
+        if (isNaN(delay) || isNaN(pos)) return movementStr;
+        
+        // Apply speed modifier (inverse: lower speed = longer delay)
+        const newDelay = Math.round(delay / speedMultiplier);
+        
+        // Apply range modifier
+        if (originalRange > 0) {
+            // Normalize position to 0-1 within original range
+            const normalizedPos = (pos - originalMin) / originalRange;
+            // Map to new range
+            pos = Math.round(newMin + (normalizedPos * newRange));
+        }
+        
+        // Clamp position to valid range
+        pos = Math.max(0, Math.min(100, pos));
+        
+        return `${newDelay},${pos}`;
+    };
+    
+    return {
+        start: (pattern.pattern.start || []).map(modifyMovement),
+        loop: (pattern.pattern.loop || []).map(modifyMovement)
+    };
+}
+
+/**
+ * Parses LLM response for pattern selection.
+ * @param {string} response - The LLM response text.
+ * @param {boolean} debugMode - Whether to log debug info.
+ * @returns {Object|null} Parsed pattern selection or null.
+ */
+function parsePatternSelection(response, debugMode = false) {
+    if (!response || typeof response !== 'string') {
+        return null;
+    }
+    
+    // Try to extract JSON from the response
+    const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    let jsonStr = null;
+    
+    if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim();
+    } else {
+        // Try to find a JSON object directly
+        const directJsonMatch = response.match(/\{[\s\S]*?"pattern"[\s\S]*?\}/i);
+        if (directJsonMatch) {
+            jsonStr = directJsonMatch[0];
+        }
+    }
+    
+    if (!jsonStr) {
+        if (debugMode) {
+            console.log(`${LOG_PREFIX} No JSON found in pattern selection response`);
+        }
+        return null;
+    }
+    
+    try {
+        const parsed = JSON.parse(jsonStr);
+        
+        if (!parsed.pattern || typeof parsed.pattern !== 'string') {
+            return null;
+        }
+        
+        return {
+            pattern: parsed.pattern,
+            speed_percent: parsed.speed_percent !== undefined ? parsed.speed_percent : 50,
+            range_min: parsed.range_min !== undefined ? parsed.range_min : null,
+            range_max: parsed.range_max !== undefined ? parsed.range_max : null
+        };
+    } catch (err) {
+        if (debugMode) {
+            console.log(`${LOG_PREFIX} Failed to parse pattern selection JSON:`, err);
+        }
+        return null;
+    }
 }
 
 /* ================================================================================================
@@ -736,9 +980,9 @@ function expandMovements(movements, settings, phaseName = "movements", endPos = 
         // Handle transition between start and loop
         if (endPos !== null && expanded.length > 0) {
             const lastPos = expanded[expanded.length - 1].pos;
-            const duration = movements[movements.length - 1].delay; // Use the duration of the last movement for the transition
+            const duration = movements[movements.length - 1]?.delay; // Use the duration of the last movement for the transition
 
-            if (lastPos !== endPos) {
+            if (duration && lastPos !== endPos) {
                 // Add a transition movement from the last position to the end position
                 const transitionSteps = expandSlowMovement(lastPos, endPos, duration, settings);
                 expanded.push(...transitionSteps);
@@ -1123,7 +1367,32 @@ async function analyzeMessageWithLLM(message, chat) {
 async function performLLMAnalysis(message, settings, fullContext = []) {
     let analysisPrompt;
 
-    analysisPrompt = settings.analysisPrompt.replace("{{message}}", message);
+    // Check if patterns mode is enabled
+    if (settings.usePatternsFile) {
+        const patterns = await loadPatterns();
+        
+        if (patterns.length === 0) {
+            console.warn(`${LOG_PREFIX} Patterns mode enabled but no patterns loaded`);
+            // Fall back to standard analysis
+            analysisPrompt = settings.analysisPrompt.replace("{{message}}", message);
+        } else {
+            // Use patterns prompt
+            const patternData = generatePatternDataForLLM(patterns);
+            analysisPrompt = (settings.patternsPrompt || defaultSettings.patternsPrompt)
+                .replace("{{message}}", message)
+                .replace("{{pattern_data}}", patternData);
+            
+            if (settings.debugMode) {
+                console.log(`${LOG_PREFIX} Using patterns mode with ${patterns.length} patterns`);
+            }
+            
+            // Perform pattern-based analysis
+            return await performPatternAnalysis(message, settings, patterns, analysisPrompt);
+        }
+    } else {
+        // Standard analysis
+        analysisPrompt = settings.analysisPrompt.replace("{{message}}", message);
+    }
     
     if (settings.debugMode) {
         console.log(`${LOG_PREFIX} Analysis prompt length: ${analysisPrompt.length} chars`);
@@ -1148,480 +1417,436 @@ async function performLLMAnalysis(message, settings, fullContext = []) {
             }
             return null;
         };
-
-        const result = await tryIsolatedGeneration();
-        if (result) {
-            response = result.response;
-            usedMethod = result.method;
-        }
         
-        
-        // Last resort: Direct API call
-        if (!response && ctx.api) {
-            if (settings.debugMode) {
-                console.log(`${LOG_PREFIX} Trying direct API call as last resort`);
-            }
-            try {
-                const apiResponse = await fetch('/api/backends/text-generation/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        prompt: analysisPrompt,
-                        temperature: 0.7,
-                    })
-                });
-                if (apiResponse.ok) {
-                    const data = await apiResponse.json();
-                    response = data.text || data.response || data.message || JSON.stringify(data);
-                    usedMethod = 'direct_api';
+        // Helper function for quiet generation (with extension context)
+        const tryQuietGeneration = async () => {
+            if (typeof ctx.generateQuietPrompt === 'function') {
+                if (settings.debugMode) {
+                    console.log(`${LOG_PREFIX} Trying generateQuietPrompt (with context)`);
                 }
-            } catch (apiErr) {
-                console.warn(`${LOG_PREFIX} Direct API call failed:`, apiErr);
+                return { response: await ctx.generateQuietPrompt(analysisPrompt, false, false, ''), method: 'generateQuietPrompt' };
+            }
+            return null;
+        };
+        
+        // Try isolated generation first (preferred for analysis tasks)
+        const isolatedResult = await tryIsolatedGeneration();
+        if (isolatedResult) {
+            response = isolatedResult.response;
+            usedMethod = isolatedResult.method;
+        }
+        
+        // Fall back to quiet generation if isolated failed or returned empty
+        if (!response && response !== '') {
+            const quietResult = await tryQuietGeneration();
+            if (quietResult) {
+                response = quietResult.response;
+                usedMethod = quietResult.method;
             }
         }
         
-        if (response) {
-            console.log(`${LOG_PREFIX} Generation completed using: ${usedMethod}`);
-        }
-        
-        if (!response) {
-            console.error(`${LOG_PREFIX} No LLM generation method available`);
-            return { success: false, error: "No LLM generation method available" };
-        }
-
-        const trimmedResponse = response.trim();
-        if (!trimmedResponse || trimmedResponse === '```') {
-            return { success: false, error: "Empty or invalid response from LLM" };
-        }
-
         if (settings.debugMode) {
-            console.log(`${LOG_PREFIX} LLM Response (${response.length} chars):`, response.substring(0, 500));
+            console.log(`${LOG_PREFIX} Used method: ${usedMethod}`);
+            console.log(`${LOG_PREFIX} LLM response length: ${response?.length || 0} chars`);
+            if (response) {
+                console.log(`${LOG_PREFIX} LLM response preview:`, response.substring(0, 500));
+            }
         }
-
-        const extractedJson = extractJsonFromResponse(response, settings.debugMode);
         
-        if (!extractedJson) {
-            console.warn(`${LOG_PREFIX} No valid JSON found in LLM response`);
+        if (!response || response.trim() === '') {
+            return { success: false, error: "Empty response from LLM" };
+        }
+        
+        // Extract JSON from the response
+        const jsonStr = extractJsonFromResponse(response, settings.debugMode);
+        
+        if (!jsonStr) {
             if (settings.debugMode) {
-                console.log(`${LOG_PREFIX} Full response:`, response);
+                console.log(`${LOG_PREFIX} No valid JSON found in response`);
             }
             return { success: false, error: "No valid JSON found in response" };
         }
-
+        
         try {
-            const parsed = JSON.parse(extractedJson);
+            const parsed = JSON.parse(jsonStr);
             
-            if (!Array.isArray(parsed.start) || !Array.isArray(parsed.loop)) {
-                console.warn(`${LOG_PREFIX} Invalid JSON structure - need start and loop arrays`);
-                return { success: false, error: "Invalid JSON structure - need start and loop arrays" };
+            // Validate the parsed data has required structure
+            if (!parsed.start && !parsed.loop) {
+                return { success: false, error: "JSON missing 'start' or 'loop' arrays" };
             }
-
-            console.log(`${LOG_PREFIX} Successfully parsed movement JSON - start: ${parsed.start.length}, loop: ${parsed.loop.length}`);
+            
+            if (settings.debugMode) {
+                console.log(`${LOG_PREFIX} Successfully parsed movement data`);
+            }
+            
             return { success: true, data: parsed };
         } catch (parseErr) {
-            console.error(`${LOG_PREFIX} JSON parse error:`, parseErr);
             if (settings.debugMode) {
-                console.log(`${LOG_PREFIX} Extracted JSON string:`, extractedJson);
+                console.log(`${LOG_PREFIX} JSON parse error:`, parseErr);
             }
             return { success: false, error: `JSON parse error: ${parseErr.message}` };
         }
-
     } catch (err) {
-        console.error(`${LOG_PREFIX} LLM analysis failed:`, err);
-        return { success: false, error: `LLM analysis failed: ${err.message}` };
+        console.error(`${LOG_PREFIX} LLM analysis error:`, err);
+        return { success: false, error: err.message || "Unknown error" };
     }
 }
 
-/* ================================================================================================
-   TEST MOVEMENT
-================================================================================================ */
 /**
- * Runs a custom test pattern provided by the user in the UI.
+ * Performs pattern-based LLM analysis.
+ * @param {string} message - The message to analyze.
+ * @param {Object} settings - The configuration settings.
+ * @param {Array} patterns - Available patterns.
+ * @param {string} analysisPrompt - The prepared prompt.
+ * @returns {Promise<{success: boolean, data?: Object, error?: string}>} The result.
  */
-function runCustomTest() {
-    const jsonInput = $("#ham_custom_test_json").val().trim();
-    
-    if (!jsonInput) {
-        console.warn(`${LOG_PREFIX} No custom JSON provided`);
-        if (window.toastr) {
-            window.toastr.warning("Please enter a JSON pattern in the text area", "Handy AI Motion");
-        }
-        return;
-    }
-    
+async function performPatternAnalysis(message, settings, patterns, analysisPrompt) {
     try {
-        const pattern = JSON.parse(jsonInput);
-        
-        // Validate structure
-        if (!pattern.start && !pattern.loop) {
-            throw new Error("JSON must have 'start' and/or 'loop' arrays");
+        const ctx = window.SillyTavern?.getContext();
+        if (!ctx) {
+            return { success: false, error: "SillyTavern context not available" };
         }
-        
-        if (pattern.start && !Array.isArray(pattern.start)) {
-            throw new Error("'start' must be an array");
-        }
-        
-        if (pattern.loop && !Array.isArray(pattern.loop)) {
-            throw new Error("'loop' must be an array");
-        }
-        
-        console.log(`${LOG_PREFIX} Running custom test:`, pattern);
-        startPlayback(pattern);
-        
-        if (window.toastr) {
-            window.toastr.success("Running custom pattern", "Handy AI Motion");
-        }
-        
-    } catch (err) {
-        console.error(`${LOG_PREFIX} Invalid JSON:`, err);
-        if (window.toastr) {
-            window.toastr.error(`Invalid JSON: ${err.message}`, "Handy AI Motion");
-        }
-    }
-}
 
-/**
- * Loads a random example movement pattern into the custom test area.
- */
-function loadExamplePattern() {
-    // Provide multiple example patterns
-    const examples = [
-        {
-            name: "Slow Strokes",
-            pattern: {
-                start: ["1000,100", "1000,0"],
-                loop: ["800,100", "800,0"]
-            }
-        },
-        {
-            name: "Fast Strokes",
-            pattern: {
-                start: ["200,100", "200,0", "200,100", "200,0"],
-                loop: ["150,100", "150,0"]
-            }
-        },
-        {
-            name: "Teasing (Short Strokes)",
-            pattern: {
-                start: ["500,60", "400,40", "500,60", "400,40"],
-                loop: ["300,70", "300,30"]
-            }
-        },
-        {
-            name: "Wave Pattern",
-            pattern: {
-                start: ["400,20", "400,40", "400,60", "400,80", "400,100"],
-                loop: ["300,100", "300,50", "300,0", "300,50"]
-            }
-        },
-        {
-            name: "Warmup to Intense",
-            pattern: {
-                start: ["800,100", "800,0", "600,100", "600,0", "400,100", "400,0"],
-                loop: ["250,100", "250,0"]
-            }
-        }
-    ];
-    
-    // Pick a random example for variety
-    const example = examples[Math.floor(Math.random() * examples.length)];
-    
-    const jsonStr = JSON.stringify(example.pattern, null, 2);
-    $("#ham_custom_test_json").val(jsonStr);
-    
-    console.log(`${LOG_PREFIX} Loaded example: ${example.name}`);
-    if (window.toastr) {
-        window.toastr.info(`Loaded: ${example.name}`, "Handy AI Motion");
-    }
-}
-
-/**
- * Tests the LLM analysis pipeline using the current test message.
- * Starts playback if successful.
- */
-async function testLLMAnalysis() {
-    console.log(`${LOG_PREFIX} Testing LLM Analysis...`);
-    
-    const settings = getConfig();
-    const testMessage = $("#ham_test_message").val()?.trim() || settings.testMessage;
-    
-    if (!testMessage) {
-        console.warn(`${LOG_PREFIX} No test message provided`);
-        if (window.toastr) {
-            window.toastr.warning("Please enter a test message", "Handy AI Motion");
-        }
-        return;
-    }
-    
-    if (window.toastr) {
-        window.toastr.info("Testing LLM connection...", "Handy AI Motion");
-    }
-    
-    if (settings.debugMode) {
-        console.log(`${LOG_PREFIX} Test message:`, testMessage.substring(0, 200));
-    }
-    
-    try {
-        const movementData = await analyzeMessageWithLLM(testMessage, "");
+        let response;
         
-        if (movementData) {
-            console.log(`${LOG_PREFIX} LLM test successful:`, movementData);
-            startPlayback(movementData);
-            
-            if (window.toastr) {
-                window.toastr.success("LLM Analysis successful! Starting playback.", "Handy AI Motion");
-            }
-        } else {
-            console.error(`${LOG_PREFIX} LLM test failed - no valid data returned`);
-            if (window.toastr) {
-                window.toastr.error("LLM Analysis failed - check console for details", "Handy AI Motion");
-            }
+        // Try generateRaw first
+        if (typeof ctx.generateRaw === 'function') {
+            response = await ctx.generateRaw(analysisPrompt);
+        } else if (typeof ctx.generateQuietPrompt === 'function') {
+            response = await ctx.generateQuietPrompt(analysisPrompt, false, false, '');
         }
+        
+        if (settings.debugMode) {
+            console.log(`${LOG_PREFIX} Pattern selection response:`, response?.substring(0, 500));
+        }
+        
+        if (!response || response.trim() === '') {
+            return { success: false, error: "Empty response from LLM for pattern selection" };
+        }
+        
+        // Parse the pattern selection
+        const selection = parsePatternSelection(response, settings.debugMode);
+        
+        if (!selection) {
+            return { success: false, error: "Could not parse pattern selection from LLM response" };
+        }
+        
+        // Find the selected pattern
+        const pattern = findPatternByName(selection.pattern, patterns);
+        
+        if (!pattern) {
+            return { success: false, error: `Pattern "${selection.pattern}" not found` };
+        }
+        
+        if (settings.debugMode) {
+            console.log(`${LOG_PREFIX} Selected pattern: ${selection.pattern}, speed: ${selection.speed_percent}%, range: ${selection.range_min}-${selection.range_max}`);
+        }
+        
+        // Apply modifiers to the pattern
+        const modifiedPattern = applyPatternModifiers(
+            pattern,
+            selection.speed_percent,
+            selection.range_min,
+            selection.range_max
+        );
+        
+        if (settings.debugMode) {
+            console.log(`${LOG_PREFIX} Modified pattern:`, modifiedPattern);
+        }
+        
+        return { success: true, data: modifiedPattern };
     } catch (err) {
-        console.error(`${LOG_PREFIX} LLM test error:`, err);
-        if (window.toastr) {
-            window.toastr.error(`LLM Analysis error: ${err.message}`, "Handy AI Motion");
-        }
+        console.error(`${LOG_PREFIX} Pattern analysis error:`, err);
+        return { success: false, error: err.message || "Unknown error" };
     }
 }
 
 /* ================================================================================================
-   SETTINGS LOAD/BIND
+   EVENT HANDLERS AND INITIALIZATION
 ================================================================================================ */
 /**
- * Loads the extension settings from the global settings object.
- * Applies default values for any missing settings and updates the UI.
+ * Handles incoming chat messages and triggers LLM analysis.
+ * @param {number} messageId - The ID of the incoming message.
  */
-async function loadSettings() {
-    extension_settings[extensionName] = extension_settings[extensionName] || {};
-    const settings = extension_settings[extensionName];
-
-    // Apply defaults for any missing settings
-    for (const k in defaultSettings) {
-        if (settings[k] === undefined) settings[k] = defaultSettings[k];
-    }
-
-    // Update UI elements with current settings
-    $("#ham_enabled").prop("checked", settings.enabled);
-    $("#ham_auto_connect").prop("checked", settings.autoConnect);
-    $("#ham_debug_mode").prop("checked", settings.debugMode);
-    $("#ham_intiface_address").val(settings.intifaceAddress);
-    $("#ham_min_speed").val(settings.minSpeed);
-    $("#ham_max_speed").val(settings.maxSpeed);
-    $("#ham_stroke_length").val(settings.strokeLength);
-    $("#ham_expand_slow").prop("checked", settings.expandSlowMovements);
-    $("#ham_step_size").val(settings.stepSize);
-    $("#ham_retry_on_invalid").prop("checked", settings.retryOnInvalid);
-    $("#ham_max_retries").val(settings.maxRetries);
-    $("#ham_analysis_prompt").val(settings.analysisPrompt);
-    $("#ham_test_message").val(settings.testMessage);
-}
-
-/**
- * Binds event listeners to UI elements for user interaction.
- * Updates settings and triggers actions based on user input.
- */
-function bindEvents() {
-    // Enable toggle
-    $("#ham_enabled").on("change", function () {
-        extension_settings[extensionName].enabled = this.checked;
-        saveSettingsDebounced();
-    });
-
-    // Auto-connect toggle
-    $("#ham_auto_connect").on("change", function () {
-        extension_settings[extensionName].autoConnect = this.checked;
-        saveSettingsDebounced();
-    });
-
-    // Debug mode toggle
-    $("#ham_debug_mode").on("change", function () {
-        extension_settings[extensionName].debugMode = this.checked;
-        saveSettingsDebounced();
-    });
-
-    // Intiface address
-    $("#ham_intiface_address").on("input", function () {
-        extension_settings[extensionName].intifaceAddress = $(this).val();
-        IntifaceState.SERVER_ADDRESS = $(this).val();
-        saveSettingsDebounced();
-    });
-
-    // Speed range
-    $("#ham_min_speed").on("input", function () {
-        extension_settings[extensionName].minSpeed = Number(this.value);
-        saveSettingsDebounced();
-    });
-
-    $("#ham_max_speed").on("input", function () {
-        extension_settings[extensionName].maxSpeed = Number(this.value);
-        saveSettingsDebounced();
-    });
-
-    // Stroke length
-    $("#ham_stroke_length").on("input", function () {
-        extension_settings[extensionName].strokeLength = Number(this.value);
-        saveSettingsDebounced();
-    });
-
-    // Expand slow movements toggle
-    $("#ham_expand_slow").on("change", function () {
-        extension_settings[extensionName].expandSlowMovements = this.checked;
-        saveSettingsDebounced();
-    });
-
-    // Step size for slow movement expansion
-    $("#ham_step_size").on("input", function () {
-        extension_settings[extensionName].stepSize = Number(this.value);
-        saveSettingsDebounced();
-    });
-
-    // Retry on invalid
-    $("#ham_retry_on_invalid").on("change", function () {
-        extension_settings[extensionName].retryOnInvalid = this.checked;
-        saveSettingsDebounced();
-    });
-
-    // Max retries
-    $("#ham_max_retries").on("input", function () {
-        extension_settings[extensionName].maxRetries = Number(this.value);
-        saveSettingsDebounced();
-    });
-
-    // Analysis prompt
-    $("#ham_analysis_prompt").on("input", function () {
-        extension_settings[extensionName].analysisPrompt = $(this).val();
-        saveSettingsDebounced();
-    });
-
-    // Test message
-    $("#ham_test_message").on("input", function () {
-        extension_settings[extensionName].testMessage = $(this).val();
-        saveSettingsDebounced();
-    });
-
-    // Connection buttons
-    $("#ham_connect_btn").on("click", function (e) {
-        e.preventDefault();
-        connectIntiface();
-    });
-
-    $("#ham_disconnect_btn").on("click", function (e) {
-        e.preventDefault();
-        disconnectIntiface();
-    });
-
-    $("#ham_stop_btn").on("click", function (e) {
-        e.preventDefault();
-        stopPlayback();
-        DeviceCommands.stopAll();
-    });
-
-    // Custom test buttons
-    $("#ham_custom_test_btn").on("click", function (e) {
-        e.preventDefault();
-        runCustomTest();
-    });
-
-    $("#ham_load_example_btn").on("click", function (e) {
-        e.preventDefault();
-        loadExamplePattern();
-    });
-
-    // LLM test button
-    $("#ham_test_llm_btn").on("click", function (e) {
-        e.preventDefault();
-        testLLMAnalysis();
-    });
-
-    // Reset prompt button
-    $("#ham_reset_prompt_btn").on("click", function (e) {
-        e.preventDefault();
-        extension_settings[extensionName].analysisPrompt = defaultSettings.analysisPrompt;
-        $("#ham_analysis_prompt").val(defaultSettings.analysisPrompt);
-        saveSettingsDebounced();
-        
-        if (window.toastr) {
-            window.toastr.success("Analysis prompt reset to default", "Handy AI Motion");
-        }
-    });
-}
-
-/* ================================================================================================
-   SILLYTAVERN EVENT HANDLERS
-================================================================================================ */
-/**
- * Handles a new message received event from SillyTavern and triggers analysis/playback if enabled.
- * @param {Object} eventData - The event data from SillyTavern.
- */
-function handleMessageReceived(eventData) {
+async function onMessageReceived(messageId) {
     const settings = getConfig();
     
     if (!settings.enabled) {
         return;
     }
     
-    // Get the message content
-    const ctx = window.SillyTavern?.getContext();
-    if (!ctx) return;
-    
-    const chat = ctx.chat || [];
-    const lastMessage = chat[chat.length - 1];
-    
-    if (!lastMessage || lastMessage.is_user) return;
-    
-    const messageText = lastMessage.mes || lastMessage.text || lastMessage.content || "";
-    
-    if (!messageText) return;
-    
-    if (settings.debugMode) {
-        console.log(`${LOG_PREFIX} Processing message:`, messageText.substring(0, 200));
-    }
-    
-    // Analyze and execute movement
-    analyzeMessageWithLLM(messageText, chat).then(movementData => {
+    try {
+        const ctx = window.SillyTavern?.getContext();
+        if (!ctx) {
+            console.warn(`${LOG_PREFIX} No SillyTavern context available`);
+            return;
+        }
+        
+        // Get the message at the specified index
+        const chat = ctx.chat;
+        if (!chat || !chat[messageId]) {
+            return;
+        }
+        
+        const message = chat[messageId];
+        
+        // Only process AI/user messages (not system messages)
+        if (message.is_system) {
+            return;
+        }
+        
+        // Get the message text
+        let messageText = message.mes || message.message || '';
+        
+        if (!messageText || messageText.trim() === '') {
+            return;
+        }
+        
+        if (settings.debugMode) {
+            console.log(`${LOG_PREFIX} Processing message ${messageId}: ${messageText.substring(0, 100)}...`);
+        }
+        
+        // Analyze the message with LLM
+        const movementData = await analyzeMessageWithLLM(messageText, chat);
+        
         if (movementData) {
+            if (settings.debugMode) {
+                console.log(`${LOG_PREFIX} Starting playback with movement data`);
+            }
             startPlayback(movementData);
         }
-    }).catch(err => {
-        console.error(`${LOG_PREFIX} Error processing message:`, err);
-    });
+    } catch (err) {
+        console.error(`${LOG_PREFIX} Error in onMessageReceived:`, err);
+    }
 }
 
-/* ================================================================================================
-   INITIALIZATION
-================================================================================================ */
-jQuery(async () => {
-    // Load settings HTML
-    const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
-    $("#extensions_settings").append(settingsHtml);
+/**
+ * Opens the patterns.json file in the system's default editor.
+ */
+function openPatternsFile() {
+    // In SillyTavern, we can use the built-in file open functionality
+    // This will open the file in a new browser tab for editing
+    const patternsUrl = `${extensionFolderPath}/patterns.json`;
+    window.open(patternsUrl, '_blank');
+}
 
-    // Load and bind settings
-    await loadSettings();
-    bindEvents();
-
-    // Set up Intiface server address from settings
-    IntifaceState.SERVER_ADDRESS = extension_settings[extensionName]?.intifaceAddress || defaultSettings.intifaceAddress;
-
-    // Register event handlers
-    try {
-        const { eventSource, event_types } = SillyTavern.getContext();
-        
-        eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, handleMessageReceived);
-        
-        console.log(`${LOG_PREFIX} Event handlers registered`);
-    } catch (err) {
-        console.warn(`${LOG_PREFIX} Could not register event handlers:`, err);
+/**
+ * Reloads patterns from the patterns.json file.
+ */
+async function reloadPatterns() {
+    cachedPatterns = null;
+    const patterns = await loadPatterns();
+    
+    if (patterns.length > 0) {
+        toastr?.success?.(`Loaded ${patterns.length} patterns`, 'Handy AI Motion');
+    } else {
+        toastr?.warning?.('No patterns loaded', 'Handy AI Motion');
     }
+    
+    return patterns;
+}
 
-    // Auto-connect if enabled
+/**
+ * Initializes the extension settings and UI.
+ */
+async function initExtension() {
     const settings = getConfig();
+    
+    // Create settings HTML
+    const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
+    $('#extensions_settings2').append(settingsHtml);
+    
+    // Initialize UI elements with current settings
+    $('#ham_enabled').prop('checked', settings.enabled);
+    $('#ham_auto_connect').prop('checked', settings.autoConnect);
+    $('#ham_debug_mode').prop('checked', settings.debugMode);
+    $('#ham_intiface_address').val(settings.intifaceAddress);
+    $('#ham_min_speed').val(settings.minSpeed);
+    $('#ham_max_speed').val(settings.maxSpeed);
+    $('#ham_stroke_length').val(settings.strokeLength);
+    $('#ham_expand_slow').prop('checked', settings.expandSlowMovements);
+    $('#ham_step_size').val(settings.stepSize);
+    $('#ham_retry_on_invalid').prop('checked', settings.retryOnInvalid);
+    $('#ham_max_retries').val(settings.maxRetries);
+    $('#ham_test_message').val(settings.testMessage);
+    $('#ham_analysis_prompt').val(settings.analysisPrompt);
+    $('#ham_use_patterns').prop('checked', settings.usePatternsFile);
+    $('#ham_patterns_prompt').val(settings.patternsPrompt || defaultSettings.patternsPrompt);
+    
+    // Bind event handlers
+    $('#ham_enabled').on('change', function() {
+        extension_settings[extensionName].enabled = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_auto_connect').on('change', function() {
+        extension_settings[extensionName].autoConnect = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_debug_mode').on('change', function() {
+        extension_settings[extensionName].debugMode = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_intiface_address').on('input', function() {
+        const addr = $(this).val().trim();
+        extension_settings[extensionName].intifaceAddress = addr;
+        IntifaceState.SERVER_ADDRESS = addr;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_min_speed').on('input', function() {
+        extension_settings[extensionName].minSpeed = parseInt($(this).val()) || 32;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_max_speed').on('input', function() {
+        extension_settings[extensionName].maxSpeed = parseInt($(this).val()) || 450;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_stroke_length').on('input', function() {
+        extension_settings[extensionName].strokeLength = parseInt($(this).val()) || 125;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_expand_slow').on('change', function() {
+        extension_settings[extensionName].expandSlowMovements = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_step_size').on('input', function() {
+        extension_settings[extensionName].stepSize = parseFloat($(this).val()) || 1;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_retry_on_invalid').on('change', function() {
+        extension_settings[extensionName].retryOnInvalid = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_max_retries').on('input', function() {
+        extension_settings[extensionName].maxRetries = parseInt($(this).val()) || 3;
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_test_message').on('input', function() {
+        extension_settings[extensionName].testMessage = $(this).val();
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_analysis_prompt').on('input', function() {
+        extension_settings[extensionName].analysisPrompt = $(this).val();
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_use_patterns').on('change', function() {
+        extension_settings[extensionName].usePatternsFile = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+    
+    $('#ham_patterns_prompt').on('input', function() {
+        extension_settings[extensionName].patternsPrompt = $(this).val();
+        saveSettingsDebounced();
+    });
+    
+    // Connection buttons
+    $('#ham_connect_btn').on('click', function() {
+        IntifaceState.SERVER_ADDRESS = settings.intifaceAddress;
+        connectIntiface();
+    });
+    
+    $('#ham_disconnect_btn').on('click', disconnectIntiface);
+    
+    $('#ham_stop_btn').on('click', function() {
+        stopPlayback();
+        DeviceCommands.stopAll();
+    });
+    
+    // Reset prompt button
+    $('#ham_reset_prompt_btn').on('click', function() {
+        $('#ham_analysis_prompt').val(defaultSettings.analysisPrompt);
+        extension_settings[extensionName].analysisPrompt = defaultSettings.analysisPrompt;
+        saveSettingsDebounced();
+    });
+    
+    // Reset patterns prompt button
+    $('#ham_reset_patterns_prompt_btn').on('click', function() {
+        $('#ham_patterns_prompt').val(defaultSettings.patternsPrompt);
+        extension_settings[extensionName].patternsPrompt = defaultSettings.patternsPrompt;
+        saveSettingsDebounced();
+    });
+    
+    // Test LLM button
+    $('#ham_test_llm_btn').on('click', async function() {
+        const testMessage = $('#ham_test_message').val();
+        if (!testMessage || testMessage.trim() === '') {
+            toastr?.warning?.('Please enter a test message', 'Handy AI Motion');
+            return;
+        }
+        
+        toastr?.info?.('Running LLM analysis...', 'Handy AI Motion');
+        
+        const result = await analyzeMessageWithLLM(testMessage, []);
+        
+        if (result) {
+            toastr?.success?.('Analysis complete, starting playback', 'Handy AI Motion');
+            startPlayback(result);
+        } else {
+            toastr?.error?.('Analysis failed', 'Handy AI Motion');
+        }
+    });
+    
+    // Custom JSON test
+    $('#ham_custom_test_btn').on('click', function() {
+        const jsonStr = $('#ham_custom_test_json').val();
+        if (!jsonStr || jsonStr.trim() === '') {
+            toastr?.warning?.('Please enter a JSON pattern', 'Handy AI Motion');
+            return;
+        }
+        
+        try {
+            const data = JSON.parse(jsonStr);
+            startPlayback(data);
+        } catch (err) {
+            toastr?.error?.(`Invalid JSON: ${err.message}`, 'Handy AI Motion');
+        }
+    });
+    
+    // Load example button
+    $('#ham_load_example_btn').on('click', function() {
+        const example = {
+            start: ["1000,50"],
+            loop: ["400,100", "400,0"]
+        };
+        $('#ham_custom_test_json').val(JSON.stringify(example, null, 2));
+    });
+    
+    // Patterns file buttons
+    $('#ham_open_patterns_btn').on('click', openPatternsFile);
+    $('#ham_reload_patterns_btn').on('click', reloadPatterns);
+    
+    // Auto-connect if enabled
     if (settings.autoConnect) {
-        setTimeout(() => {
-            console.log(`${LOG_PREFIX} Auto-connecting to Intiface...`);
-            connectIntiface();
-        }, 2000);
+        IntifaceState.SERVER_ADDRESS = settings.intifaceAddress;
+        setTimeout(connectIntiface, 1000);
     }
+    
+    // Register event listener for incoming messages
+    eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+    eventSource.on(event_types.MESSAGE_SENT, () => {
+        // Stop playback when user sends a message
+        stopPlayback();
+    });
+    
+    console.log(`${LOG_PREFIX} Extension initialized`);
+}
 
-    console.log(`${LOG_PREFIX} Extension loaded successfully`);
+// Import event types and event source from SillyTavern
+import { event_types, eventSource } from "../../../../script.js";
+
+// Initialize when jQuery is ready
+jQuery(async () => {
+    await initExtension();
 });
